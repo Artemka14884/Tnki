@@ -2,8 +2,8 @@
 //  TANKS ONLINE - сервер
 //  Node.js + ws. Раздаёт клиента (public/) и держит игровое
 //  состояние: два независимых режима-комнаты —
-//  «Командный бой» (10 минут, песок + кусты) и
-//  «Бой насмерть» (бесконечный, классическая карта, без команд).
+//  «Бой насмерть» (бесконечный, старая карта — дефолтный/бета режим) и
+//  «Командный бой» (10 минут, песок + кусты).
 // ==========================================================
 const http = require('http');
 const fs = require('fs');
@@ -41,9 +41,6 @@ const BROADCAST_MS = 1000 / 20;
 const MATCH_DURATION_MS = 10 * 60 * 1000; // 10 минут
 const RESET_DELAY_MS    = 12 * 1000;      // пауза перед новым матчем
 const TEAM_LABEL = { red: 'Красные', blue: 'Синие' };
-
-// ---------------------- Мод-меню ----------------------
-const ADMIN_PASSWORD = 'sbascvxzc';
 
 // ---------------------- Скины: радужные / неоновые цвета ----------------------
 const SKIN_PALETTE = [
@@ -153,14 +150,14 @@ function generateTeamMap() {
   return obstacles;
 }
 
-// ---------------------- Карта 2: «Бой насмерть» — классика без команд ----------------------
-// Как в первой версии игры: стены/ящики/деревья, но заметно меньше объектов, чтобы не лагало.
+// ---------------------- Карта 2: «Бой насмерть» — старая карта из первой версии ----------------------
+// Это дефолтный/бета-режим игры: классическая карта со стенами, деревьями и ящиками.
 function generateDmMap() {
   const rand = seededRandom(778899);
   const obstacles = borderWalls();
 
   const types = ['wall', 'tree', 'crate'];
-  const COUNT = 55;
+  const COUNT = 110;
   for (let i = 0; i < COUNT; i++) {
     const type = types[Math.floor(rand() * types.length)];
     let w, h;
@@ -255,8 +252,7 @@ class GameRoom {
       lastShot: 0,
       respawnAt: 0,
       kills: 0, deaths: 0,
-      hidden: false,
-      isAdmin: false, godMode: false, speedBoost: false, rapidFire: false
+      hidden: false
     };
   }
 
@@ -268,35 +264,10 @@ class GameRoom {
     this.broadcast({ t: 'chat', text: `${p.name} покинул игру` });
   }
 
-  handleAdmin(p, msg) {
-    if (msg.password !== ADMIN_PASSWORD) {
-      p.ws.send(JSON.stringify({ t: 'adminAuth', ok: false }));
-      return;
-    }
-    if (!p.isAdmin) {
-      p.isAdmin = true;
-      p.ws.send(JSON.stringify({ t: 'adminAuth', ok: true }));
-    }
-    switch (msg.action) {
-      case 'god':   p.godMode = !p.godMode; break;
-      case 'speed': p.speedBoost = !p.speedBoost; break;
-      case 'rapid': p.rapidFire = !p.rapidFire; break;
-      case 'heal':  p.hp = MAX_HP; p.alive = true; break;
-      case 'teleportCenter': {
-        const spot = this.findSpawnPoint(); // безопасная точка, а не жёсткий центр
-        p.x = spot.x; p.y = spot.y;
-        break;
-      }
-      default: return;
-    }
-    p.ws.send(JSON.stringify({ t: 'adminState', god: p.godMode, speed: p.speedBoost, rapid: p.rapidFire }));
-  }
-
   tryShoot(p) {
     if (!p.alive || this.matchOver) return;
     const now = Date.now();
-    const cooldown = p.rapidFire ? 90 : SHOOT_COOLDOWN;
-    if (now - p.lastShot < cooldown) return;
+    if (now - p.lastShot < SHOOT_COOLDOWN) return;
     p.lastShot = now;
     const dist = TANK_RADIUS + BULLET_RADIUS + 8;
     this.bullets.push({
@@ -356,8 +327,7 @@ class GameRoom {
         const nx = mx / len, ny = my / len;
         const targetAngle = Math.atan2(ny, nx);
         p.angle = angleLerp(p.angle, targetAngle, TANK_ROT_SPEED * dt);
-        const speedMult = p.speedBoost ? 2 : 1;
-        const speed = TANK_SPEED * speedMult * Math.min(len, 1);
+        const speed = TANK_SPEED * Math.min(len, 1);
         const newX = p.x + nx * speed * dt;
         const newY = p.y + ny * speed * dt;
         if (!this.collidesSolid(newX, p.y, TANK_RADIUS)) p.x = newX;
@@ -390,19 +360,17 @@ class GameRoom {
           const dx = p.x - b.x, dy = p.y - b.y;
           if (dx * dx + dy * dy < (TANK_RADIUS + BULLET_RADIUS) ** 2) {
             this.bullets.splice(i, 1);
-            if (!p.godMode) {
-              p.hp -= BULLET_DAMAGE;
-              if (p.hp <= 0) {
-                p.alive = false; p.hp = 0; p.deaths++;
-                p.respawnAt = Date.now() + RESPAWN_MS;
-                const killer = this.players.get(b.ownerId);
-                if (killer) {
-                  killer.kills++;
-                  if (this.hasTeams) this.teamScore[killer.team]++;
-                }
-                this.killFeed.push({ killer: killer ? killer.name : '???', victim: p.name, t: Date.now() });
-                if (this.killFeed.length > 6) this.killFeed.shift();
+            p.hp -= BULLET_DAMAGE;
+            if (p.hp <= 0) {
+              p.alive = false; p.hp = 0; p.deaths++;
+              p.respawnAt = Date.now() + RESPAWN_MS;
+              const killer = this.players.get(b.ownerId);
+              if (killer) {
+                killer.kills++;
+                if (this.hasTeams) this.teamScore[killer.team]++;
               }
+              this.killFeed.push({ killer: killer ? killer.name : '???', victim: p.name, t: Date.now() });
+              if (this.killFeed.length > 6) this.killFeed.shift();
             }
             removed = true;
             break;
@@ -419,8 +387,7 @@ class GameRoom {
       players: Array.from(this.players.values()).map(p => ({
         id: p.id, name: p.name, x: p.x, y: p.y, angle: p.angle, turret: p.turret,
         hp: p.hp, alive: p.alive, color: p.color, team: p.team,
-        kills: p.kills, deaths: p.deaths, hidden: !!p.hidden,
-        god: p.godMode, speed: p.speedBoost, rapid: p.rapidFire
+        kills: p.kills, deaths: p.deaths, hidden: !!p.hidden
       })),
       bullets: this.bullets.map(b => ({ id: b.id, x: b.x, y: b.y, angle: b.angle, ownerId: b.ownerId, color: b.color, team: b.ownerTeam })),
       killFeed: this.killFeed,
@@ -512,8 +479,6 @@ wss.on('connection', (ws) => {
       room.tryShoot(p);
     } else if (msg.t === 'changeSkin') {
       p.color = pickSkin(msg.skin);
-    } else if (msg.t === 'admin') {
-      room.handleAdmin(p, msg);
     }
   });
 
@@ -526,6 +491,5 @@ server.listen(PORT, () => {
   console.log(`\n  Tanks Online сервер запущен! (версия ${GAME_VERSION})`);
   console.log(`  Локально:     http://localhost:${PORT}`);
   console.log(`  Для друзей в одной сети: http://<твой-IP>:${PORT}`);
-  console.log(`  Режимы: «Командный бой» (10 мин) и «Бой насмерть» (бесконечный)`);
-  console.log(`  Мод-меню по паролю "${ADMIN_PASSWORD}"\n`);
+  console.log(`  Режимы: «Бой насмерть» (бесконечный, по умолчанию) и «Командный бой» (10 мин)\n`);
 });

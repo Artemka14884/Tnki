@@ -90,23 +90,11 @@
   #matchOverBanner .box h2{ margin:0 0 8px; font-size:26px; }
   #matchOverBanner .box p{ color:#c2a670; margin:0; }
 
-  /* ---------- мод-меню ---------- */
-  #modMenuBtn{ position:fixed; bottom:12px; left:12px; z-index:30; width:38px; height:38px; border-radius:50%;
-    background:#00000066; border:1px solid #ffffff33; color:#fff; font-size:16px; display:flex;
-    align-items:center; justify-content:center; cursor:pointer; }
-  #modMenuPanel{ position:fixed; bottom:60px; left:12px; z-index:31; background:#181510ee; border:1px solid #5c4a2c;
-    border-radius:10px; padding:14px; width:220px; display:none; color:#f0e6cf; font-size:13px; }
-  #modMenuPanel h3{ margin:0 0 10px; font-size:14px; color:#ffd35c; }
-  #modMenuPanel input{ width:100%; padding:8px; border-radius:6px; border:1px solid #5c4a2c;
-    background:#0f0c05; color:#fff; margin-bottom:8px; }
-  #modMenuPanel button{ width:100%; padding:8px; margin-bottom:6px; border:none; border-radius:6px;
-    background:#3a3120; color:#f0e6cf; cursor:pointer; text-align:left; font-size:12px; }
-  #modMenuPanel button.active{ background:#ffd35c; color:#241800; font-weight:700; }
-  #modMenuPanel .err{ color:#ff7b7b; font-size:11px; min-height:14px; }
-  #modMenuPanel .locked{ display:block; }
-  #modMenuPanel .unlocked{ display:none; }
-  #modMenuPanel.open-unlocked .locked{ display:none; }
-  #modMenuPanel.open-unlocked .unlocked{ display:block; }
+  /* ---------- кнопка выхода в меню ---------- */
+  #exitBtn{ position:fixed; bottom:12px; left:12px; z-index:30; padding:10px 16px; border-radius:10px;
+    background:#00000077; border:1px solid #ffffff33; color:#fff; font-size:13px; cursor:pointer;
+    font-weight:700; }
+  #exitBtn:active{ transform: translateY(1px); }
 
   /* ---------- мобильное управление ---------- */
   #mobileControls{ display:none; }
@@ -138,15 +126,15 @@
 
       <label>Режим игры</label>
       <div id="modeGrid">
-        <div class="modeCard selected" data-mode="team">
+        <div class="modeCard selected" data-mode="dm">
+          <div class="ico">💀</div>
+          <div class="title">Бой насмерть</div>
+          <div class="desc">Бета · бесконечно · старая карта · все против всех</div>
+        </div>
+        <div class="modeCard" data-mode="team">
           <div class="ico">🏳️</div>
           <div class="title">Командный бой</div>
           <div class="desc">10 минут · песок и кусты · 🔴 vs 🔵</div>
-        </div>
-        <div class="modeCard" data-mode="dm">
-          <div class="ico">💀</div>
-          <div class="title">Бой насмерть</div>
-          <div class="desc">Бесконечно · классическая карта · все против всех</div>
         </div>
       </div>
 
@@ -190,23 +178,7 @@
     <div id="killFeed"></div>
     <canvas id="minimap" width="180" height="120"></canvas>
 
-    <div id="modMenuBtn">⚙</div>
-    <div id="modMenuPanel">
-      <div class="locked">
-        <h3>Мод-меню</h3>
-        <input id="modPassInput" type="password" placeholder="Пароль">
-        <button id="modUnlockBtn">Войти</button>
-        <div class="err" id="modErr"></div>
-      </div>
-      <div class="unlocked">
-        <h3>Мод-меню ⚡</h3>
-        <button id="modGod">🛡 God Mode</button>
-        <button id="modSpeed">💨 Скорость ×2</button>
-        <button id="modRapid">🔫 Быстрая стрельба</button>
-        <button id="modHeal">❤ Полное HP</button>
-        <button id="modTeleport">📍 Телепорт (безопасно)</button>
-      </div>
-    </div>
+    <div id="exitBtn">🚪 Выйти в меню</div>
 
     <div id="mobileControls">
       <div class="joyZone" id="joyMove"><div class="joyStick" id="joyMoveStick"></div></div>
@@ -253,7 +225,7 @@
     '#ddff00','#00ffb2','#00c3ff','#7b00ff','#f4f4f4','#ffd700'
   ];
   let selectedSkin = SKIN_PALETTE[Math.floor(Math.random()*SKIN_PALETTE.length)];
-  let selectedMode = 'team';
+  let selectedMode = 'dm';
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
@@ -333,7 +305,8 @@
       if (connectScreen.style.display !== 'flex') {
         connectScreen.style.display = 'flex';
         gameContainer.style.display = 'none';
-        statusEl.textContent = 'Соединение с сервером потеряно';
+        statusEl.textContent = manualDisconnect ? '' : 'Соединение с сервером потеряно';
+        manualDisconnect = false;
       }
     };
     ws.onmessage = (ev) => {
@@ -366,14 +339,8 @@
         timeLeftMs = msg.timeLeftMs;
         matchOver = msg.matchOver;
         updateMatchOverBanner(msg);
-        applyMyAdminState();
       } else if (msg.t === 'chat') {
         chatLog.push(msg.text);
-      } else if (msg.t === 'adminAuth') {
-        onAdminAuth(msg.ok);
-      } else if (msg.t === 'adminState') {
-        modState = { god: msg.god, speed: msg.speed, rapid: msg.rapid };
-        renderModButtons();
       }
     };
   }
@@ -394,65 +361,17 @@
     }
   }
 
-  // ---------------- Мод-меню ----------------
-  let modUnlocked = false;
-  let modState = { god:false, speed:false, rapid:false };
-  const modMenuBtn = document.getElementById('modMenuBtn');
-  const modMenuPanel = document.getElementById('modMenuPanel');
-  const modPassInput = document.getElementById('modPassInput');
-  const modUnlockBtn = document.getElementById('modUnlockBtn');
-  const modErr = document.getElementById('modErr');
-
-  modMenuBtn.addEventListener('click', ()=>{
-    modMenuPanel.style.display = modMenuPanel.style.display==='block' ? 'none' : 'block';
+  // ---------------- Кнопка "Выйти в меню" ----------------
+  let manualDisconnect = false;
+  document.getElementById('exitBtn').addEventListener('click', ()=>{
+    manualDisconnect = true;
+    if (ws) ws.close();
   });
-  modUnlockBtn.addEventListener('click', tryUnlock);
-  modPassInput.addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
-
-  function tryUnlock(){
-    if(!ws || ws.readyState!==WebSocket.OPEN) return;
-    const pass = modPassInput.value;
-    ws.send(JSON.stringify({t:'admin', password: pass, action:'ping'}));
-  }
-  function onAdminAuth(ok){
-    if(ok){
-      modUnlocked = true;
-      modErr.textContent = '';
-      modMenuPanel.classList.add('open-unlocked');
-    } else {
-      modErr.textContent = 'Неверный пароль';
-      modUnlocked = false;
-      modMenuPanel.classList.remove('open-unlocked');
-    }
-  }
-  function sendAdminAction(action){
-    if(!ws || ws.readyState!==WebSocket.OPEN || !modUnlocked) return;
-    ws.send(JSON.stringify({t:'admin', password: modPassInput.value, action}));
-  }
-  document.getElementById('modGod').addEventListener('click', ()=>sendAdminAction('god'));
-  document.getElementById('modSpeed').addEventListener('click', ()=>sendAdminAction('speed'));
-  document.getElementById('modRapid').addEventListener('click', ()=>sendAdminAction('rapid'));
-  document.getElementById('modHeal').addEventListener('click', ()=>sendAdminAction('heal'));
-  document.getElementById('modTeleport').addEventListener('click', ()=>sendAdminAction('teleportCenter'));
-
-  function renderModButtons(){
-    document.getElementById('modGod').classList.toggle('active', modState.god);
-    document.getElementById('modSpeed').classList.toggle('active', modState.speed);
-    document.getElementById('modRapid').classList.toggle('active', modState.rapid);
-  }
-  function applyMyAdminState(){
-    const me = players.find(p=>p.id===myId);
-    if(!me) return;
-    if(me.god!==modState.god || me.speed!==modState.speed || me.rapid!==modState.rapid){
-      modState = { god: !!me.god, speed: !!me.speed, rapid: !!me.rapid };
-      renderModButtons();
-    }
-  }
 
   // ---------------- Ввод: клавиатура (ПК) ----------------
   const keys = { up:false, down:false, left:false, right:false };
   window.addEventListener('keydown', e=>{
-    if(document.activeElement===modPassInput || document.activeElement===nameInput || document.activeElement===serverInput) return;
+    if(document.activeElement===nameInput || document.activeElement===serverInput) return;
     if(e.code==='KeyW'||e.code==='ArrowUp') keys.up=true;
     if(e.code==='KeyS'||e.code==='ArrowDown') keys.down=true;
     if(e.code==='KeyA'||e.code==='ArrowLeft') keys.left=true;
