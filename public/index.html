@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Танчики Онлайн</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background:#1b1710; font-family: 'Segoe UI', Arial, sans-serif; }
+
+  /* ---------- экран подключения ---------- */
+  #connectScreen {
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(circle at 50% 30%, #3a2f18, #14110a 75%);
+    z-index: 50; overflow-y:auto; padding:20px 0;
+  }
+  .panel {
+    background:#26200f; border:2px solid #5c4a2c; border-radius:14px;
+    padding:24px 26px; width:min(92vw, 420px); box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  .panel h1 { color:#ffd35c; margin:0 0 4px; font-size:26px; text-align:center; letter-spacing:1px;}
+  .panel .sub { color:#c2a670; text-align:center; margin-bottom:16px; font-size:13px;}
+  .panel label { color:#d8bd85; font-size:13px; display:block; margin:12px 0 4px;}
+  .panel input {
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid #5c4a2c;
+    background:#181405; color:#f0e6cf; font-size:15px; outline:none;
+  }
+  .panel input:focus{ border-color:#ffd35c; }
+  .panel button {
+    width:100%; margin-top:20px; padding:12px; border:none; border-radius:8px;
+    background:linear-gradient(180deg,#ffd35c,#e2a020); color:#241800; font-weight:700;
+    font-size:16px; cursor:pointer; letter-spacing:.5px;
+  }
+  .panel button:active{ transform: translateY(1px); }
+  .panel .hint{ color:#8a7550; font-size:11px; margin-top:14px; line-height:1.5; text-align:center;}
+  #status{ color:#ff7b7b; text-align:center; min-height:18px; font-size:13px; margin-top:8px;}
+
+  #modeGrid{ display:flex; gap:10px; margin-top:6px; }
+  .modeCard{ flex:1; border:2px solid #5c4a2c; border-radius:10px; padding:12px 10px; cursor:pointer;
+    background:#1d180a; text-align:center; }
+  .modeCard.selected{ border-color:#ffd35c; background:#332608; }
+  .modeCard .ico{ font-size:24px; }
+  .modeCard .title{ color:#f0e6cf; font-weight:700; font-size:13px; margin-top:4px; }
+  .modeCard .desc{ color:#8a7550; font-size:11px; margin-top:2px; }
+
+  #skinGrid{ display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-top:6px; }
+  .skinSwatch{ width:100%; aspect-ratio:1; border-radius:8px; cursor:pointer;
+    border:3px solid transparent; box-shadow:0 0 6px rgba(0,0,0,.5); }
+  .skinSwatch.selected{ border-color:#fff; box-shadow:0 0 10px currentColor; transform:scale(1.05); }
+
+  /* ---------- игра ---------- */
+  #gameContainer { position:fixed; inset:0; display:none; }
+  canvas { display:block; background:#c9a86a; touch-action:none; }
+
+  #hud { position:fixed; top:10px; left:10px; z-index:20; pointer-events:none; }
+  #hpWrap { width:180px; height:20px; background:#00000066; border-radius:6px; overflow:hidden; border:1px solid #000;}
+  #hpBar { height:100%; width:100%; background:linear-gradient(90deg,#43a047,#8bc34a); transition:width .15s;}
+  #hpLabel{ color:#fff; font-size:12px; margin-top:3px; text-shadow:0 1px 2px #000; }
+  #deadLabel{ color:#ff5252; font-size:16px; font-weight:700; margin-top:4px; text-shadow:0 1px 3px #000; display:none;}
+  #hiddenLabel{ color:#8bffb0; font-size:12px; font-weight:700; margin-top:4px; text-shadow:0 1px 3px #000; display:none;}
+
+  #matchBar{ position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:20;
+    display:flex; align-items:center; gap:14px; background:#00000066; border-radius:10px;
+    padding:8px 16px; pointer-events:none; }
+  #teamScoreRed{ color:#ff6b6b; font-weight:700; font-size:15px; }
+  #teamScoreBlue{ color:#6bb8ff; font-weight:700; font-size:15px; }
+  #matchTimer{ color:#fff; font-weight:700; font-size:16px; min-width:56px; text-align:center;}
+
+  #dmBar{ position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:20;
+    background:#00000066; border-radius:10px; padding:8px 16px; pointer-events:none;
+    color:#ffd35c; font-weight:700; font-size:14px; display:none; }
+
+  #scoreBoard{ position:fixed; top:10px; right:10px; z-index:20; color:#fff; font-size:12px;
+    background:#00000055; padding:8px 10px; border-radius:8px; text-align:right; min-width:160px; pointer-events:none;}
+  #scoreBoard .row{ display:flex; justify-content:space-between; gap:10px; opacity:.9;}
+  #scoreBoard .row.me{ color:#ffe066; }
+
+  #killFeed{ position:fixed; top:100px; right:10px; z-index:20; color:#fff; font-size:12px;
+    text-align:right; pointer-events:none; text-shadow:0 1px 2px #000;}
+  #killFeed div{ margin-bottom:3px; }
+
+  #minimap{ position:fixed; bottom:10px; right:10px; z-index:20; border:2px solid #00000088;
+    border-radius:6px; background:#1c1608aa; pointer-events:none;}
+
+  #matchOverBanner{ position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+    background:#000000aa; }
+  #matchOverBanner .box{ background:#26200f; border:2px solid #ffd35c; border-radius:14px; padding:30px 40px;
+    text-align:center; color:#fff; }
+  #matchOverBanner .box h2{ margin:0 0 8px; font-size:26px; }
+  #matchOverBanner .box p{ color:#c2a670; margin:0; }
+
+  /* ---------- мод-меню ---------- */
+  #modMenuBtn{ position:fixed; bottom:12px; left:12px; z-index:30; width:38px; height:38px; border-radius:50%;
+    background:#00000066; border:1px solid #ffffff33; color:#fff; font-size:16px; display:flex;
+    align-items:center; justify-content:center; cursor:pointer; }
+  #modMenuPanel{ position:fixed; bottom:60px; left:12px; z-index:31; background:#181510ee; border:1px solid #5c4a2c;
+    border-radius:10px; padding:14px; width:220px; display:none; color:#f0e6cf; font-size:13px; }
+  #modMenuPanel h3{ margin:0 0 10px; font-size:14px; color:#ffd35c; }
+  #modMenuPanel input{ width:100%; padding:8px; border-radius:6px; border:1px solid #5c4a2c;
+    background:#0f0c05; color:#fff; margin-bottom:8px; }
+  #modMenuPanel button{ width:100%; padding:8px; margin-bottom:6px; border:none; border-radius:6px;
+    background:#3a3120; color:#f0e6cf; cursor:pointer; text-align:left; font-size:12px; }
+  #modMenuPanel button.active{ background:#ffd35c; color:#241800; font-weight:700; }
+  #modMenuPanel .err{ color:#ff7b7b; font-size:11px; min-height:14px; }
+  #modMenuPanel .locked{ display:block; }
+  #modMenuPanel .unlocked{ display:none; }
+  #modMenuPanel.open-unlocked .locked{ display:none; }
+  #modMenuPanel.open-unlocked .unlocked{ display:block; }
+
+  /* ---------- мобильное управление ---------- */
+  #mobileControls{ display:none; }
+  .joyZone{ position:fixed; bottom:24px; width:130px; height:130px; border-radius:50%;
+    background:#ffffff14; border:2px solid #ffffff33; z-index:25; touch-action:none;}
+  #joyMove{ left:24px; }
+  #joyAim{ right:24px; }
+  .joyStick{ position:absolute; width:56px; height:56px; border-radius:50%;
+    background:#ffffff55; top:37px; left:37px; pointer-events:none;}
+  #fireBtn{
+    position:fixed; right:44px; bottom:172px; width:80px; height:80px; border-radius:50%;
+    background:radial-gradient(circle,#ff7043,#d84315); border:3px solid #ffffff55;
+    color:#fff; font-weight:700; font-size:14px; z-index:26; touch-action:none;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px #0006;
+  }
+
+  @media (max-width:820px), (pointer:coarse) {
+    #mobileControls{ display:block; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ===================== ЭКРАН ПОДКЛЮЧЕНИЯ ===================== -->
+  <div id="connectScreen">
+    <div class="panel">
+      <h1>🎯 ТАНЧИКИ ОНЛАЙН</h1>
+      <div class="sub">Выбери режим, скин и подключайся</div>
+
+      <label>Режим игры</label>
+      <div id="modeGrid">
+        <div class="modeCard selected" data-mode="team">
+          <div class="ico">🏳️</div>
+          <div class="title">Командный бой</div>
+          <div class="desc">10 минут · песок и кусты · 🔴 vs 🔵</div>
+        </div>
+        <div class="modeCard" data-mode="dm">
+          <div class="ico">💀</div>
+          <div class="title">Бой насмерть</div>
+          <div class="desc">Бесконечно · классическая карта · все против всех</div>
+        </div>
+      </div>
+
+      <label>Ваше имя</label>
+      <input id="nameInput" maxlength="16" placeholder="Игрок" value="">
+
+      <label>Адрес сервера</label>
+      <input id="serverInput" placeholder="ws://192.168.1.10:8080" value="">
+
+      <label>Скин танка (радужные / неоновые цвета)</label>
+      <div id="skinGrid"></div>
+
+      <button id="connectBtn">▶ В бой</button>
+      <div id="status"></div>
+      <div class="hint">
+        Хост запускает сервер (node server.js) и даёт друзьям свой IP-адрес и порт.<br>
+        В локальной сети: ws://IP-хоста:8080
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ИГРА ===================== -->
+  <div id="gameContainer">
+    <canvas id="canvas"></canvas>
+
+    <div id="hud">
+      <div id="hpWrap"><div id="hpBar"></div></div>
+      <div id="hpLabel">100 / 100</div>
+      <div id="deadLabel">УНИЧТОЖЕН — возрождение через 3с</div>
+      <div id="hiddenLabel">🌿 Вы скрыты в кустах</div>
+    </div>
+
+    <div id="matchBar">
+      <div id="teamScoreRed">🔴 0</div>
+      <div id="matchTimer">10:00</div>
+      <div id="teamScoreBlue">🔵 0</div>
+    </div>
+    <div id="dmBar">💀 Бой насмерть — бесконечный</div>
+
+    <div id="scoreBoard"></div>
+    <div id="killFeed"></div>
+    <canvas id="minimap" width="180" height="120"></canvas>
+
+    <div id="modMenuBtn">⚙</div>
+    <div id="modMenuPanel">
+      <div class="locked">
+        <h3>Мод-меню</h3>
+        <input id="modPassInput" type="password" placeholder="Пароль">
+        <button id="modUnlockBtn">Войти</button>
+        <div class="err" id="modErr"></div>
+      </div>
+      <div class="unlocked">
+        <h3>Мод-меню ⚡</h3>
+        <button id="modGod">🛡 God Mode</button>
+        <button id="modSpeed">💨 Скорость ×2</button>
+        <button id="modRapid">🔫 Быстрая стрельба</button>
+        <button id="modHeal">❤ Полное HP</button>
+        <button id="modTeleport">📍 Телепорт (безопасно)</button>
+      </div>
+    </div>
+
+    <div id="mobileControls">
+      <div class="joyZone" id="joyMove"><div class="joyStick" id="joyMoveStick"></div></div>
+      <div class="joyZone" id="joyAim"><div class="joyStick" id="joyAimStick"></div></div>
+      <div id="fireBtn">ОГОНЬ</div>
+    </div>
+  </div>
+
+  <div id="matchOverBanner">
+    <div class="box">
+      <h2 id="matchOverTitle">Матч окончен</h2>
+      <p id="matchOverSub">Новый бой начнётся через несколько секунд...</p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  // Версия клиента — должна совпадать с сервером, иначе он откажет в подключении
+  const GAME_VERSION = '2.1.0';
+
+  // ---------------- Состояние клиента ----------------
+  let ws = null;
+  let myId = null;
+  let myTeam = null;
+  let isTeamMode = true;
+  let mapW = 3600, mapH = 2400;
+  let obstacles = [];
+  let TANK_RADIUS = 20, BULLET_RADIUS = 5, MAX_HP = 100;
+
+  let players = [];
+  let bullets = [];
+  let killFeed = [];
+  let chatLog = [];
+  let teamScore = { red:0, blue:0 };
+  let timeLeftMs = 600000;
+  let matchOver = false;
+
+  // радужная / неоновая палитра скинов (совпадает с сервером)
+  const SKIN_PALETTE = [
+    '#ff2079','#39ff14','#00f7ff','#faff00','#ff8800','#b026ff',
+    '#ff1f4b','#00ff9d','#1f6bff','#ff00e6','#ff005c','#ff9900',
+    '#ddff00','#00ffb2','#00c3ff','#7b00ff','#f4f4f4','#ffd700'
+  ];
+  let selectedSkin = SKIN_PALETTE[Math.floor(Math.random()*SKIN_PALETTE.length)];
+  let selectedMode = 'team';
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const minimap = document.getElementById('minimap');
+  const mctx = minimap.getContext('2d');
+
+  function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------- Выбор режима ----------------
+  document.querySelectorAll('.modeCard').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      document.querySelectorAll('.modeCard').forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedMode = card.dataset.mode;
+    });
+  });
+
+  // ---------------- Выбор скина на экране подключения ----------------
+  const skinGrid = document.getElementById('skinGrid');
+  function renderSkinGrid(){
+    skinGrid.innerHTML = '';
+    SKIN_PALETTE.forEach(hex=>{
+      const el = document.createElement('div');
+      el.className = 'skinSwatch' + (hex===selectedSkin?' selected':'');
+      el.style.background = hex;
+      el.style.color = hex;
+      el.addEventListener('click', ()=>{
+        selectedSkin = hex;
+        renderSkinGrid();
+        if(ws && ws.readyState===WebSocket.OPEN){
+          ws.send(JSON.stringify({t:'changeSkin', skin: selectedSkin}));
+        }
+      });
+      skinGrid.appendChild(el);
+    });
+  }
+  renderSkinGrid();
+
+  // ---------------- Подключение ----------------
+  const connectScreen = document.getElementById('connectScreen');
+  const gameContainer = document.getElementById('gameContainer');
+  const statusEl = document.getElementById('status');
+  const nameInput = document.getElementById('nameInput');
+  const serverInput = document.getElementById('serverInput');
+  const matchBar = document.getElementById('matchBar');
+  const dmBar = document.getElementById('dmBar');
+
+  // адрес по умолчанию — тот же хост, с которого открыта страница
+  const defaultProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  serverInput.value = defaultProto + location.host;
+  nameInput.value = 'Игрок' + Math.floor(Math.random()*900+100);
+
+  document.getElementById('connectBtn').addEventListener('click', connect);
+  serverInput.addEventListener('keydown', e=>{ if(e.key==='Enter') connect(); });
+  nameInput.addEventListener('keydown', e=>{ if(e.key==='Enter') connect(); });
+
+  function connect(){
+    const url = serverInput.value.trim() || (defaultProto + location.host);
+    const name = nameInput.value.trim() || 'Игрок';
+    statusEl.textContent = 'Подключение...';
+    try{
+      ws = new WebSocket(url);
+    }catch(e){
+      statusEl.textContent = 'Некорректный адрес сервера';
+      return;
+    }
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({t:'join', name, skin: selectedSkin, mode: selectedMode, version: GAME_VERSION}));
+    };
+    ws.onerror = () => {
+      statusEl.textContent = 'Не удалось подключиться к серверу';
+    };
+    ws.onclose = () => {
+      if (connectScreen.style.display !== 'flex') {
+        connectScreen.style.display = 'flex';
+        gameContainer.style.display = 'none';
+        statusEl.textContent = 'Соединение с сервером потеряно';
+      }
+    };
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.t === 'versionMismatch') {
+        statusEl.textContent = `Версия игры устарела/не совпадает с сервером (нужна ${msg.serverVersion}). Обновите страницу игры.`;
+        ws.close();
+        return;
+      }
+      if (msg.t === 'welcome') {
+        myId = msg.id;
+        myTeam = msg.team;
+        isTeamMode = msg.mode === 'team';
+        mapW = msg.map.w; mapH = msg.map.h;
+        obstacles = msg.obstacles;
+        TANK_RADIUS = msg.constants.tankRadius;
+        BULLET_RADIUS = msg.constants.bulletRadius;
+        MAX_HP = msg.constants.maxHp;
+        matchBar.style.display = isTeamMode ? 'flex' : 'none';
+        dmBar.style.display = isTeamMode ? 'none' : 'block';
+        connectScreen.style.display = 'none';
+        gameContainer.style.display = 'block';
+        buildBgPattern();
+        requestAnimationFrame(loop);
+      } else if (msg.t === 'state') {
+        players = msg.players;
+        bullets = msg.bullets;
+        killFeed = msg.killFeed || [];
+        teamScore = msg.teamScore || teamScore;
+        timeLeftMs = msg.timeLeftMs;
+        matchOver = msg.matchOver;
+        updateMatchOverBanner(msg);
+        applyMyAdminState();
+      } else if (msg.t === 'chat') {
+        chatLog.push(msg.text);
+      } else if (msg.t === 'adminAuth') {
+        onAdminAuth(msg.ok);
+      } else if (msg.t === 'adminState') {
+        modState = { god: msg.god, speed: msg.speed, rapid: msg.rapid };
+        renderModButtons();
+      }
+    };
+  }
+
+  // ---------------- Баннер конца матча (только командный режим) ----------------
+  const matchOverBanner = document.getElementById('matchOverBanner');
+  const matchOverTitle = document.getElementById('matchOverTitle');
+  const matchOverSub = document.getElementById('matchOverSub');
+  function updateMatchOverBanner(msg){
+    if (isTeamMode && msg.matchOver) {
+      matchOverBanner.style.display = 'flex';
+      if (msg.matchWinner === 'draw') matchOverTitle.textContent = '🤝 Ничья!';
+      else if (msg.matchWinner === myTeam) matchOverTitle.textContent = '🏆 Победа вашей команды!';
+      else matchOverTitle.textContent = '💀 Ваша команда проиграла';
+      matchOverSub.textContent = 'Новый бой начнётся через несколько секунд...';
+    } else {
+      matchOverBanner.style.display = 'none';
+    }
+  }
+
+  // ---------------- Мод-меню ----------------
+  let modUnlocked = false;
+  let modState = { god:false, speed:false, rapid:false };
+  const modMenuBtn = document.getElementById('modMenuBtn');
+  const modMenuPanel = document.getElementById('modMenuPanel');
+  const modPassInput = document.getElementById('modPassInput');
+  const modUnlockBtn = document.getElementById('modUnlockBtn');
+  const modErr = document.getElementById('modErr');
+
+  modMenuBtn.addEventListener('click', ()=>{
+    modMenuPanel.style.display = modMenuPanel.style.display==='block' ? 'none' : 'block';
+  });
+  modUnlockBtn.addEventListener('click', tryUnlock);
+  modPassInput.addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
+
+  function tryUnlock(){
+    if(!ws || ws.readyState!==WebSocket.OPEN) return;
+    const pass = modPassInput.value;
+    ws.send(JSON.stringify({t:'admin', password: pass, action:'ping'}));
+  }
+  function onAdminAuth(ok){
+    if(ok){
+      modUnlocked = true;
+      modErr.textContent = '';
+      modMenuPanel.classList.add('open-unlocked');
+    } else {
+      modErr.textContent = 'Неверный пароль';
+      modUnlocked = false;
+      modMenuPanel.classList.remove('open-unlocked');
+    }
+  }
+  function sendAdminAction(action){
+    if(!ws || ws.readyState!==WebSocket.OPEN || !modUnlocked) return;
+    ws.send(JSON.stringify({t:'admin', password: modPassInput.value, action}));
+  }
+  document.getElementById('modGod').addEventListener('click', ()=>sendAdminAction('god'));
+  document.getElementById('modSpeed').addEventListener('click', ()=>sendAdminAction('speed'));
+  document.getElementById('modRapid').addEventListener('click', ()=>sendAdminAction('rapid'));
+  document.getElementById('modHeal').addEventListener('click', ()=>sendAdminAction('heal'));
+  document.getElementById('modTeleport').addEventListener('click', ()=>sendAdminAction('teleportCenter'));
+
+  function renderModButtons(){
+    document.getElementById('modGod').classList.toggle('active', modState.god);
+    document.getElementById('modSpeed').classList.toggle('active', modState.speed);
+    document.getElementById('modRapid').classList.toggle('active', modState.rapid);
+  }
+  function applyMyAdminState(){
+    const me = players.find(p=>p.id===myId);
+    if(!me) return;
+    if(me.god!==modState.god || me.speed!==modState.speed || me.rapid!==modState.rapid){
+      modState = { god: !!me.god, speed: !!me.speed, rapid: !!me.rapid };
+      renderModButtons();
+    }
+  }
+
+  // ---------------- Ввод: клавиатура (ПК) ----------------
+  const keys = { up:false, down:false, left:false, right:false };
+  window.addEventListener('keydown', e=>{
+    if(document.activeElement===modPassInput || document.activeElement===nameInput || document.activeElement===serverInput) return;
+    if(e.code==='KeyW'||e.code==='ArrowUp') keys.up=true;
+    if(e.code==='KeyS'||e.code==='ArrowDown') keys.down=true;
+    if(e.code==='KeyA'||e.code==='ArrowLeft') keys.left=true;
+    if(e.code==='KeyD'||e.code==='ArrowRight') keys.right=true;
+    if(e.code==='Space'){ sendShoot(); e.preventDefault(); }
+  });
+  window.addEventListener('keyup', e=>{
+    if(e.code==='KeyW'||e.code==='ArrowUp') keys.up=false;
+    if(e.code==='KeyS'||e.code==='ArrowDown') keys.down=false;
+    if(e.code==='KeyA'||e.code==='ArrowLeft') keys.left=false;
+    if(e.code==='KeyD'||e.code==='ArrowRight') keys.right=false;
+  });
+
+  let mouseWorld = {x:0,y:0};
+  canvas.addEventListener('mousemove', e=>{
+    mouseWorld.x = camX + e.clientX;
+    mouseWorld.y = camY + e.clientY;
+  });
+  canvas.addEventListener('mousedown', ()=> sendShoot());
+
+  // ---------------- Ввод: мобильные джойстики ----------------
+  let moveVec = {x:0,y:0};
+  let aimAngle = 0;
+  let aiming = false;
+
+  function setupJoystick(zoneId, stickId, onMove, onEnd){
+    const zone = document.getElementById(zoneId);
+    const stick = document.getElementById(stickId);
+    let active = false, startX=0, startY=0, touchId=null;
+    const RADIUS = 50;
+
+    function handleStart(e){
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      touchId = t.identifier;
+      active = true;
+      const rect = zone.getBoundingClientRect();
+      startX = rect.left + rect.width/2;
+      startY = rect.top + rect.height/2;
+      e.preventDefault();
+    }
+    function handleMove(e){
+      if(!active) return;
+      let t = null;
+      if(e.changedTouches){
+        for(const touch of e.changedTouches){ if(touch.identifier===touchId){ t=touch; break; } }
+        if(!t) return;
+      } else t = e;
+      let dx = t.clientX - startX, dy = t.clientY - startY;
+      const dist = Math.hypot(dx,dy);
+      if(dist > RADIUS){ dx = dx/dist*RADIUS; dy = dy/dist*RADIUS; }
+      stick.style.left = (37+dx) + 'px';
+      stick.style.top = (37+dy) + 'px';
+      onMove(dx/RADIUS, dy/RADIUS);
+      e.preventDefault();
+    }
+    function handleEnd(e){
+      if(!active) return;
+      active = false;
+      stick.style.left='37px'; stick.style.top='37px';
+      onEnd();
+      e.preventDefault();
+    }
+
+    zone.addEventListener('touchstart', handleStart, {passive:false});
+    zone.addEventListener('touchmove', handleMove, {passive:false});
+    zone.addEventListener('touchend', handleEnd, {passive:false});
+    zone.addEventListener('touchcancel', handleEnd, {passive:false});
+  }
+
+  setupJoystick('joyMove','joyMoveStick',
+    (nx,ny)=>{ moveVec.x = nx; moveVec.y = ny; },
+    ()=>{ moveVec.x = 0; moveVec.y = 0; });
+
+  setupJoystick('joyAim','joyAimStick',
+    (nx,ny)=>{ if(Math.hypot(nx,ny) > 0.15){ aimAngle = Math.atan2(ny,nx); aiming = true; } },
+    ()=>{ aiming = false; });
+
+  const fireBtn = document.getElementById('fireBtn');
+  let fireHold = null;
+  function startFire(e){ sendShoot(); fireHold = setInterval(sendShoot, 350); e.preventDefault(); }
+  function stopFire(e){ if(fireHold){ clearInterval(fireHold); fireHold=null; } if(e) e.preventDefault(); }
+  fireBtn.addEventListener('touchstart', startFire, {passive:false});
+  fireBtn.addEventListener('touchend', stopFire, {passive:false});
+  fireBtn.addEventListener('touchcancel', stopFire, {passive:false});
+  fireBtn.addEventListener('mousedown', startFire);
+  window.addEventListener('mouseup', stopFire);
+
+  function sendShoot(){
+    if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({t:'shoot'}));
+  }
+
+  // ---------------- Отправка ввода на сервер ----------------
+  let lastSentInput = {mx:0,my:0};
+  setInterval(()=>{
+    if(!ws || ws.readyState!==WebSocket.OPEN) return;
+    let mx=0,my=0;
+    if(keys.left) mx-=1;
+    if(keys.right) mx+=1;
+    if(keys.up) my-=1;
+    if(keys.down) my+=1;
+    if(mx===0 && my===0 && (moveVec.x||moveVec.y)){ mx=moveVec.x; my=moveVec.y; }
+    const len = Math.hypot(mx,my);
+    if(len>1){ mx/=len; my/=len; }
+    if(mx!==lastSentInput.mx || my!==lastSentInput.my){
+      ws.send(JSON.stringify({t:'input', mx, my}));
+      lastSentInput = {mx,my};
+    }
+  }, 50);
+
+  let lastSentAim = null;
+  setInterval(()=>{
+    if(!ws || ws.readyState!==WebSocket.OPEN) return;
+    const me = players.find(p=>p.id===myId);
+    let angle;
+    if (aiming) angle = aimAngle;
+    else if (me) angle = Math.atan2(mouseWorld.y-me.y, mouseWorld.x-me.x);
+    else return;
+    if (angle !== lastSentAim) {
+      ws.send(JSON.stringify({t:'aim', angle}));
+      lastSentAim = angle;
+    }
+  }, 50);
+
+  // ---------------- Процедурные текстуры (песок) ----------------
+  let bgPattern = null;
+  function buildBgPattern(){
+    const p = document.createElement('canvas');
+    p.width = 64; p.height = 64;
+    const pc = p.getContext('2d');
+    if (isTeamMode) {
+      pc.fillStyle = '#c9a86a'; pc.fillRect(0,0,64,64);
+      pc.fillStyle = '#bd9a5a';
+      for(let i=0;i<50;i++) pc.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+      pc.fillStyle = '#d8b978';
+      for(let i=0;i<30;i++) pc.fillRect(Math.random()*64, Math.random()*64, 1.5, 1.5);
+      pc.strokeStyle = '#a68a53';
+    } else {
+      pc.fillStyle = '#33512a'; pc.fillRect(0,0,64,64);
+      pc.fillStyle = '#3a5c30';
+      for(let i=0;i<40;i++) pc.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+      pc.strokeStyle = '#2c4524';
+    }
+    pc.lineWidth=1;
+    pc.strokeRect(0,0,64,64);
+    bgPattern = ctx.createPattern(p, 'repeat');
+  }
+
+  function drawObstacle(o){
+    const sx = o.x - camX, sy = o.y - camY;
+    if (sx+o.w < -50 || sy+o.h < -50 || sx > canvas.width+50 || sy > canvas.height+50) return;
+
+    if (o.type === 'wall') {
+      const grad = ctx.createLinearGradient(sx,sy,sx,sy+o.h);
+      grad.addColorStop(0,'#a89a80'); grad.addColorStop(1,'#7a6c54');
+      ctx.fillStyle = grad;
+      ctx.fillRect(sx,sy,o.w,o.h);
+      ctx.strokeStyle = '#544a38'; ctx.lineWidth=3;
+      ctx.strokeRect(sx,sy,o.w,o.h);
+      ctx.strokeStyle = '#00000033'; ctx.lineWidth=1;
+      for(let i=8;i<Math.max(o.w,o.h);i+=14){
+        ctx.beginPath();
+        ctx.moveTo(sx+Math.max(0,i-o.h), sy+Math.min(i,o.h));
+        ctx.lineTo(sx+Math.min(i,o.w), sy+Math.max(0,i-o.w));
+        ctx.stroke();
+      }
+    } else if (o.type === 'bush') {
+      const cx = sx+o.w/2, cy = sy+o.h/2, r = o.w/2;
+      ctx.fillStyle = '#3d6b2e';
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill();
+      ctx.fillStyle = '#4d8138';
+      ctx.beginPath(); ctx.arc(cx-r*0.3,cy-r*0.2,r*0.7,0,7); ctx.fill();
+      ctx.fillStyle = '#5c9944';
+      ctx.beginPath(); ctx.arc(cx+r*0.25,cy+r*0.15,r*0.5,0,7); ctx.fill();
+    } else if (o.type === 'tree') {
+      const cx = sx+o.w/2, cy = sy+o.h/2, r = o.w/2;
+      ctx.fillStyle = '#5b3a22';
+      ctx.fillRect(cx-4, cy, 8, r);
+      ctx.fillStyle = '#2e6b2e';
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill();
+      ctx.fillStyle = '#3f8a3f';
+      ctx.beginPath(); ctx.arc(cx-r*0.25,cy-r*0.25,r*0.65,0,7); ctx.fill();
+    } else { // crate
+      ctx.fillStyle = '#8a5a2b';
+      ctx.fillRect(sx,sy,o.w,o.h);
+      ctx.strokeStyle = '#5c3a1a'; ctx.lineWidth=3;
+      ctx.strokeRect(sx,sy,o.w,o.h);
+      ctx.beginPath();
+      ctx.moveTo(sx,sy); ctx.lineTo(sx+o.w,sy+o.h);
+      ctx.moveTo(sx+o.w,sy); ctx.lineTo(sx,sy+o.h);
+      ctx.lineWidth=2; ctx.stroke();
+    }
+  }
+
+  function drawTank(p){
+    const sx = p.x - camX, sy = p.y - camY;
+    if (sx < -60 || sy < -60 || sx > canvas.width+60 || sy > canvas.height+60) return;
+    if (!p.alive) return;
+
+    // враг, скрытый в кустах, — почти не виден (только в командном режиме с кустами)
+    const isEnemyHidden = isTeamMode && p.hidden && p.team !== myTeam && p.id !== myId;
+    const alpha = isEnemyHidden ? 0.12 : 1;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(sx, sy);
+
+    // корпус
+    ctx.save();
+    ctx.rotate(p.angle);
+    ctx.fillStyle = p.color;
+    ctx.strokeStyle = isTeamMode ? (p.team==='red' ? '#ff3b3b' : '#3b9bff') : '#00000088';
+    ctx.lineWidth = isTeamMode ? 3 : 2;
+    roundRect(ctx, -18, -13, 36, 26, 5);
+    ctx.fill(); ctx.stroke();
+    // гусеницы
+    ctx.fillStyle = '#00000055';
+    ctx.fillRect(-18,-16,36,5);
+    ctx.fillRect(-18,11,36,5);
+    ctx.restore();
+
+    // башня
+    ctx.save();
+    ctx.rotate(p.turret);
+    ctx.fillStyle = shade(p.color, -20);
+    ctx.beginPath(); ctx.arc(0,0,11,0,7); ctx.fill();
+    ctx.strokeStyle='#00000088'; ctx.stroke();
+    ctx.fillRect(0,-3.5,24,7);
+    ctx.restore();
+
+    ctx.restore();
+
+    if (isEnemyHidden) return; // не рисуем ник/хп скрытому врагу
+
+    // ник + хп (цвет рамки = команда, если есть)
+    ctx.font = '12px Segoe UI, Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000aa';
+    ctx.fillText(p.name, sx+1, sy-27+1);
+    ctx.fillStyle = isTeamMode ? (p.team==='red' ? '#ffb3b3' : '#b3d9ff') : '#ffffff';
+    ctx.fillText(p.name, sx, sy-27);
+
+    const barW=34;
+    ctx.fillStyle = '#00000088';
+    ctx.fillRect(sx-barW/2, sy-24, barW, 5);
+    ctx.fillStyle = p.hp>50?'#8bc34a':(p.hp>20?'#ffb300':'#e53935');
+    ctx.fillRect(sx-barW/2, sy-24, barW*(p.hp/MAX_HP), 5);
+
+    if (isTeamMode && p.hidden && p.team===myTeam && p.id!==myId){
+      ctx.fillStyle = '#8bffb0';
+      ctx.font = '10px Segoe UI, Arial';
+      ctx.fillText('🌿', sx, sy-36);
+    }
+  }
+
+  function drawBullet(b){
+    const sx = b.x-camX, sy=b.y-camY;
+    if (sx<-20||sy<-20||sx>canvas.width+20||sy>canvas.height+20) return;
+    const color = b.color || '#ffca28';
+    ctx.save();
+    ctx.translate(sx,sy);
+    const grad = ctx.createRadialGradient(0,0,0,0,0,BULLET_RADIUS*2.4);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, color + '00');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(0,0,BULLET_RADIUS*2.4,0,7); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(0,0,BULLET_RADIUS*0.55,0,7); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(0,0,BULLET_RADIUS,0,7); ctx.fill();
+    ctx.restore();
+  }
+
+  function roundRect(c,x,y,w,h,r){
+    c.beginPath();
+    c.moveTo(x+r,y);
+    c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r);
+    c.arcTo(x,y+h,x,y,r);
+    c.arcTo(x,y,x+w,y,r);
+    c.closePath();
+  }
+  function shade(hex, percent){
+    const n = parseInt(hex.slice(1),16);
+    let r=(n>>16)+percent, g=((n>>8)&0xff)+percent, b=(n&0xff)+percent;
+    r=Math.max(0,Math.min(255,r)); g=Math.max(0,Math.min(255,g)); b=Math.max(0,Math.min(255,b));
+    return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+  }
+
+  // ---------------- Камера ----------------
+  let camX=0, camY=0;
+
+  // ---------------- HUD ----------------
+  const hpBar = document.getElementById('hpBar');
+  const hpLabel = document.getElementById('hpLabel');
+  const deadLabel = document.getElementById('deadLabel');
+  const hiddenLabel = document.getElementById('hiddenLabel');
+  const scoreBoard = document.getElementById('scoreBoard');
+  const killFeedEl = document.getElementById('killFeed');
+  const matchTimerEl = document.getElementById('matchTimer');
+  const teamScoreRedEl = document.getElementById('teamScoreRed');
+  const teamScoreBlueEl = document.getElementById('teamScoreBlue');
+
+  function fmtTime(ms){
+    const s = Math.max(0, Math.ceil(ms/1000));
+    const m = Math.floor(s/60);
+    const r = s%60;
+    return m + ':' + (r<10?'0':'') + r;
+  }
+
+  function updateHud(){
+    const me = players.find(p=>p.id===myId);
+    if(me){
+      hpBar.style.width = Math.max(0,(me.hp/MAX_HP*100)) + '%';
+      hpLabel.textContent = `${Math.max(0,me.hp)} / ${MAX_HP}`;
+      deadLabel.style.display = me.alive ? 'none' : 'block';
+      hiddenLabel.style.display = (isTeamMode && me.alive && me.hidden) ? 'block' : 'none';
+    }
+    const sorted = [...players].sort((a,b)=>b.kills-a.kills).slice(0,8);
+    scoreBoard.innerHTML = '<b>🏆 Игроки</b>' + sorted.map(p=>
+      `<div class="row ${p.id===myId?'me':''}">
+        <span>${isTeamMode ? (p.team==='red'?'🔴':'🔵') + ' ' : ''}${escapeHtml(p.name)}</span>
+        <span>${p.kills} / ${p.deaths}</span>
+      </div>`
+    ).join('');
+
+    killFeedEl.innerHTML = killFeed.slice(-5).map(k=>
+      `<div>💥 ${escapeHtml(k.killer)} → ${escapeHtml(k.victim)}</div>`
+    ).join('');
+
+    if (isTeamMode) {
+      matchTimerEl.textContent = fmtTime(timeLeftMs);
+      teamScoreRedEl.textContent = '🔴 ' + (teamScore.red||0);
+      teamScoreBlueEl.textContent = '🔵 ' + (teamScore.blue||0);
+    }
+  }
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function drawMinimap(){
+    mctx.clearRect(0,0,minimap.width,minimap.height);
+    const sx = minimap.width/mapW, sy = minimap.height/mapH;
+    mctx.fillStyle = '#00000055';
+    mctx.fillRect(0,0,minimap.width,minimap.height);
+    for(const o of obstacles){
+      if(o.type!=='wall') continue;
+      mctx.fillStyle = '#ffffff33';
+      mctx.fillRect(o.x*sx, o.y*sy, Math.max(1,o.w*sx), Math.max(1,o.h*sy));
+    }
+    for(const p of players){
+      if(!p.alive) continue;
+      if(isTeamMode && p.hidden && p.team!==myTeam && p.id!==myId) continue; // враг в кустах не на радаре
+      mctx.fillStyle = p.id===myId ? '#fff' : (isTeamMode ? (p.team==='red' ? '#ff5c5c' : '#5cabff') : p.color);
+      mctx.beginPath();
+      mctx.arc(p.x*sx, p.y*sy, p.id===myId?3.5:2.5, 0, 7);
+      mctx.fill();
+    }
+  }
+
+  // ---------------- Главный цикл рендера ----------------
+  function loop(){
+    const me = players.find(p=>p.id===myId);
+    if(me){
+      camX = Math.max(0, Math.min(mapW-canvas.width, me.x - canvas.width/2));
+      camY = Math.max(0, Math.min(mapH-canvas.height, me.y - canvas.height/2));
+    }
+
+    ctx.fillStyle = bgPattern || '#c9a86a';
+    ctx.save();
+    ctx.translate(-camX % 64, -camY % 64);
+    ctx.fillRect(camX%64 - 64, camY%64 - 64, canvas.width+128, canvas.height+128);
+    ctx.restore();
+
+    for(const o of obstacles) if(o.type!=='bush') drawObstacle(o);
+    for(const b of bullets) drawBullet(b);
+    for(const p of players) drawTank(p);
+    for(const o of obstacles) if(o.type==='bush') drawObstacle(o); // кусты поверх танков — прячут их
+
+    updateHud();
+    drawMinimap();
+
+    requestAnimationFrame(loop);
+  }
+
+})();
+</script>
+</body>
+</html>
